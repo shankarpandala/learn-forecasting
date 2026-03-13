@@ -9,6 +9,23 @@ import NoteBlock from '../../../components/content/NoteBlock.jsx';
 import WarningBlock from '../../../components/content/WarningBlock.jsx';
 import PythonCode from '../../../components/content/PythonCode.jsx';
 import ReferenceList from '../../../components/content/ReferenceList.jsx';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+// Simulated CV MAE per fold across three models
+const cvFoldData = [
+  { fold: 'Fold 1', lgb: 4.1, rf: 5.3, ridge: 7.2 },
+  { fold: 'Fold 2', lgb: 3.8, rf: 5.0, ridge: 6.9 },
+  { fold: 'Fold 3', lgb: 4.4, rf: 5.5, ridge: 7.4 },
+  { fold: 'Fold 4', lgb: 4.0, rf: 4.9, ridge: 7.0 },
+  { fold: 'Fold 5', lgb: 3.7, rf: 4.7, ridge: 6.7 },
+];
+
+// Simulated MAE growth over forecast horizon
+const horizonData = Array.from({ length: 14 }, (_, i) => ({
+  h: i + 1,
+  lgb:   parseFloat((3.5 + i * 0.12).toFixed(2)),
+  ridge: parseFloat((5.8 + i * 0.22).toFixed(2)),
+}));
 
 const architectureCode = `# pip install mlforecast lightgbm
 # mlforecast requires data in "long format":
@@ -297,6 +314,39 @@ export default function MLForecastPipeline() {
       <h2 className="text-xl font-semibold text-white mt-8 mb-3">Cross-Validation</h2>
 
       <PythonCode code={cvCode} title="mlforecast Cross-Validation" />
+
+      {/* CV visualization */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', margin: '1rem 0' }}>
+        <div style={{ padding: '0.75rem', background: '#0f172a', borderRadius: '8px', border: '1px solid #334155' }}>
+          <p style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.5rem' }}>MAE per CV Fold</p>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={cvFoldData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" />
+              <XAxis dataKey="fold" stroke="#64748b" tick={{ fontSize: 10 }} />
+              <YAxis stroke="#64748b" tick={{ fontSize: 10 }} />
+              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', color: '#e2e8f0', fontSize: 11 }} />
+              <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 11 }} />
+              <Bar dataKey="lgb" fill="#34d399" name="LightGBM" />
+              <Bar dataKey="rf"  fill="#60a5fa" name="Random Forest" />
+              <Bar dataKey="ridge" fill="#f87171" name="Ridge" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ padding: '0.75rem', background: '#0f172a', borderRadius: '8px', border: '1px solid #334155' }}>
+          <p style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.5rem' }}>MAE vs Horizon</p>
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={horizonData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" />
+              <XAxis dataKey="h" stroke="#64748b" tick={{ fontSize: 10 }} />
+              <YAxis stroke="#64748b" tick={{ fontSize: 10 }} />
+              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', color: '#e2e8f0', fontSize: 11 }} />
+              <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 11 }} />
+              <Line type="monotone" dataKey="lgb"   stroke="#34d399" dot={false} name="LightGBM" strokeWidth={2} />
+              <Line type="monotone" dataKey="ridge" stroke="#f87171" dot={false} name="Ridge" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
 
       <h2 className="text-xl font-semibold text-white mt-8 mb-3">Multiple Models and Ensembling</h2>
       <p className="text-zinc-300 leading-relaxed">

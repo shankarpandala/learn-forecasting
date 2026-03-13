@@ -9,270 +9,285 @@ import NoteBlock from '../../../components/content/NoteBlock.jsx';
 import WarningBlock from '../../../components/content/WarningBlock.jsx';
 import PythonCode from '../../../components/content/PythonCode.jsx';
 import ReferenceList from '../../../components/content/ReferenceList.jsx';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, ReferenceLine,
+} from 'recharts';
 
-function FineTuningDecisionTree() {
-  const [answer1, setAnswer1] = useState(null);
-  const [answer2, setAnswer2] = useState(null);
-  const recommendation = () => {
-    if (answer1 === 'no') return { text: 'Use zero-shot TimeGPT', color: 'bg-green-100 border-green-300 text-green-800' };
-    if (answer1 === 'yes' && answer2 === 'no') return { text: 'Use zero-shot TimeGPT — not enough data to fine-tune', color: 'bg-yellow-100 border-yellow-300 text-yellow-800' };
-    if (answer1 === 'yes' && answer2 === 'yes') return { text: 'Fine-tune TimeGPT — likely to improve accuracy', color: 'bg-purple-100 border-purple-300 text-purple-800' };
-    return null;
-  };
-  const rec = recommendation();
-  return (
-    <div className="my-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-      <h4 className="font-semibold text-gray-700 mb-4">Should You Fine-Tune?</h4>
-      <div className="space-y-4">
-        <div>
-          <p className="text-sm font-medium text-gray-700 mb-2">Is zero-shot TimeGPT underperforming your baseline?</p>
-          <div className="flex gap-2">
-            {[['yes', 'Yes'], ['no', 'No (zero-shot is good enough)']].map(([v, l]) => (
-              <button key={v} onClick={() => { setAnswer1(v); setAnswer2(null); }}
-                className={`px-4 py-2 rounded text-sm border transition-all ${answer1 === v ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-700 border-gray-300 hover:border-gray-500'}`}>
-                {l}
-              </button>
-            ))}
-          </div>
-        </div>
-        {answer1 === 'yes' && (
-          <div>
-            <p className="text-sm font-medium text-gray-700 mb-2">Do you have at least 100+ observations per series (or many similar series)?</p>
-            <div className="flex gap-2">
-              {[['yes', 'Yes'], ['no', 'No']].map(([v, l]) => (
-                <button key={v} onClick={() => setAnswer2(v)}
-                  className={`px-4 py-2 rounded text-sm border transition-all ${answer2 === v ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-700 border-gray-300 hover:border-gray-500'}`}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {rec && (
-          <div className={`p-3 rounded border font-medium text-sm ${rec.color}`}>
-            Recommendation: {rec.text}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+const makeCurve = (n, overfitAt) =>
+  Array.from({ length: n }, (_, i) => {
+    const k = i + 1;
+    const train = +(0.44 * Math.exp(-0.028 * k) + 0.058).toFixed(4);
+    const overfit = overfitAt && k > overfitAt ? (k - overfitAt) * 0.0028 : 0;
+    const val = +(0.42 * Math.exp(-0.017 * k) + 0.078 + overfit).toFixed(4);
+    return { step: k, train, val };
+  });
 
-const fineTuningCode = `from nixtla import NixtlaClient
+const SCENARIOS = {
+  10:  { label: '10 steps (under-fit)', color: '#f59e0b', data: makeCurve(60, null).slice(0, 60) },
+  50:  { label: '50 steps (good fit)',  color: '#22c55e', data: makeCurve(60, null) },
+  150: { label: '150 steps (overfit)',  color: '#ef4444', data: makeCurve(60, 40) },
+};
+
+const LOSS_OPTIONS = [
+  { name: 'MAE',   desc: 'Optimizes the conditional median. Robust to outliers. Recommended default for most demand forecasting tasks.' },
+  { name: 'MSE',   desc: 'Optimizes the conditional mean. Strongly penalizes large deviations; sensitive to spikes and outliers.' },
+  { name: 'RMSE',  desc: 'Square root of MSE; same physical units as target. Useful for communicating error magnitude to stakeholders.' },
+  { name: 'MAPE',  desc: 'Percentage-based. Undefined when y = 0 — avoid with intermittent or near-zero demand series.' },
+  { name: 'SMAPE', desc: 'Symmetric MAPE — bounded [0, 200%] but still numerically unstable when |y| + |ŷ| ≈ 0.' },
+];
+
+const code = `from nixtla import NixtlaClient
 import pandas as pd
 import numpy as np
 
-client = NixtlaClient(api_key='YOUR_NIXTLA_API_KEY')
+client = NixtlaClient(api_key="YOUR_NIXTLA_API_KEY")
 
-# ── 1. Prepare fine-tuning dataset ────────────────────────────────────────
-# The more domain-specific and diverse your fine-tuning data, the better.
-# You need: unique_id, ds, y — same format as forecasting.
-np.random.seed(42)
+# ── Prepare data (required cols: unique_id | ds | y) ─────────────────────────
+df = pd.read_csv("weekly_demand.csv", parse_dates=["ds"])
+cutoff = df["ds"].max() - pd.Timedelta(weeks=8)
+train  = df[df["ds"] <= cutoff]
+test   = df[df["ds"] >  cutoff]
+H = 8
 
-# Simulate a specialized industrial sensor domain
-# that differs from TimeGPT's pre-training distribution
-records = []
-for uid in range(30):
-    T = 200
-    dates = pd.date_range('2020-01-01', periods=T, freq='h')
-    # Non-standard pattern: sawtooth with random resets
-    t = np.arange(T)
-    y = (20 * (t % 48) / 48 +       # sawtooth: 48-hour cycle
-         3  * np.random.randn(T))
-    for d, v in zip(dates, y):
-        records.append({'unique_id': f'sensor_{uid}', 'ds': d, 'y': float(v)})
+# ── 1. Zero-shot baseline ─────────────────────────────────────────────────────
+fc_zs = client.forecast(
+    df=train, h=H, freq="W",
+    time_col="ds", target_col="y",
+    model="timegpt-1",
+)
 
-ft_df = pd.DataFrame(records)
-print(f"Fine-tuning dataset: {ft_df['unique_id'].nunique()} series, ~{T} steps each")
-
-# ── 2. Fine-tune TimeGPT ──────────────────────────────────────────────────
-# finetune_steps: number of gradient update steps on your domain data
-# finetune_depth: 1 (light), 2 (medium), 3 (deep) — deeper = more adaptation
-#                 but higher risk of catastrophic forgetting
-# loss_function:  'mae', 'mse', 'pinball' (for probabilistic)
-
-ft_model = client.finetune(
-    ft_df,
-    freq='h',
+# ── 2. Fine-tuned: 50 steps, MAE loss ─────────────────────────────────────────
+fc_ft = client.forecast(
+    df=train, h=H, freq="W",
+    time_col="ds", target_col="y",
+    model="timegpt-1",
     finetune_steps=50,
-    finetune_depth=1,     # light fine-tuning — preserves general knowledge
-    id_col='unique_id',
-    time_col='ds',
-    target_col='y',
+    finetune_loss="mae",
 )
 
-print("Fine-tuned model ID:", ft_model.model_id)
+# ── 3. MASE evaluation on holdout ─────────────────────────────────────────────
+def mase(y_true, y_pred, y_train, s=52):
+    num = np.mean(np.abs(np.array(y_true) - np.array(y_pred)))
+    den = np.mean(np.abs(y_train[s:] - y_train[:-s]))
+    return num / den if den > 0 else np.nan
 
-# ── 3. Forecast with fine-tuned model ─────────────────────────────────────
-# Hold out the last 24 steps for evaluation
-test_sensor = ft_df[ft_df['unique_id'] == 'sensor_0'].copy()
-train_sensor = test_sensor.iloc[:-24]
-actual_24    = test_sensor.iloc[-24:]
+for label, fc in [("zero-shot", fc_zs), ("ft-50-mae", fc_ft)]:
+    scores = []
+    for uid, grp in test.groupby("unique_id"):
+        pred   = fc[fc["unique_id"] == uid]["TimeGPT"].values
+        actual = grp.sort_values("ds")["y"].values
+        hist   = train[train["unique_id"] == uid]["y"].values
+        scores.append(mase(actual, pred, hist))
+    print(f"{label:14s}  MASE = {np.nanmean(scores):.4f}")
 
-# Zero-shot forecast
-pred_zeroshot = client.forecast(train_sensor, h=24, freq='h')
-
-# Fine-tuned forecast (pass model_id)
-pred_finetuned = client.forecast(
-    train_sensor, h=24, freq='h',
-    model=ft_model.model_id,    # use fine-tuned weights
-)
-
-# Compare accuracy
-mae_zs = np.mean(np.abs(pred_zeroshot['TimeGPT'].values - actual_24['y'].values))
-mae_ft = np.mean(np.abs(pred_finetuned['TimeGPT'].values - actual_24['y'].values))
-print(f"Zero-shot MAE:  {mae_zs:.3f}")
-print(f"Fine-tuned MAE: {mae_ft:.3f}")
-print(f"Improvement:    {(1 - mae_ft/mae_zs)*100:.1f}%")
-
-# ── 4. Fine-tuning for probabilistic forecasts ────────────────────────────
-ft_prob_model = client.finetune(
-    ft_df,
-    freq='h',
-    finetune_steps=50,
-    finetune_depth=1,
-    loss_function='pinball',    # optimize quantile loss
-)
-
-pred_prob = client.forecast(
-    train_sensor, h=24, freq='h',
-    model=ft_prob_model.model_id,
-    level=[80, 90],
-)
-print(pred_prob.columns.tolist())
-
-# ── 5. Cost and token considerations ──────────────────────────────────────
-# Fine-tuning consumes tokens proportional to:
-#   finetune_steps × dataset_size
-# Rule of thumb: start with finetune_steps=10 to test improvement,
-# then increase to 50–100 for final deployment.
-# Use fewer, larger series (if available) over many short series.
+# ── 4. Cross-validation to pick optimal finetune_steps ───────────────────────
+for steps in [0, 10, 50, 100, 200]:
+    cv = client.cross_validation(
+        df=df, h=H, n_windows=3, freq="W",
+        time_col="ds", target_col="y",
+        model="timegpt-1",
+        finetune_steps=steps,
+        finetune_loss="mae",
+    )
+    cv_mae = (cv["y"] - cv["TimeGPT"]).abs().mean()
+    print(f"steps={steps:4d}  CV-MAE = {cv_mae:.4f}")
 `;
 
-export default function TimeGPTFineTuningSection() {
+export default function TimeGPTFinetuning() {
+  const [activeSteps, setActiveSteps] = useState(50);
+  const [activeLoss, setActiveLoss] = useState('MAE');
+
+  const scenario = SCENARIOS[activeSteps];
+  const lossInfo = LOSS_OPTIONS.find((l) => l.name === activeLoss);
+
   return (
-    <SectionLayout
-      title="Fine-tuning TimeGPT"
-      difficulty="advanced"
-      readingTime={11}
-    >
-      <p className="text-gray-700 leading-relaxed">
-        While TimeGPT's zero-shot capability is impressive, there are situations
-        where <strong>fine-tuning</strong> — adapting the pre-trained model to
-        domain-specific data — substantially improves accuracy. This section
-        covers when fine-tuning helps, how to do it with the Nixtla API, and
-        important cost and overfitting considerations.
+    <SectionLayout title="Fine-Tuning TimeGPT" difficulty="advanced" readingTime={11}>
+      <p>
+        TimeGPT ships as a zero-shot API — no training required for inference. For most
+        standard datasets, zero-shot performance is competitive with domain-specific
+        models. But when your series exhibit patterns absent from the pre-training corpus
+        — unusual seasonality, proprietary demand dynamics, or systematic zero-shot bias
+        — fine-tuning with a small number of gradient steps can meaningfully reduce error
+        at moderate additional cost.
       </p>
 
-      <DefinitionBlock title="Fine-Tuning vs. Zero-Shot">
-        <strong>Zero-shot forecasting</strong> uses the pre-trained TimeGPT
-        model directly without any domain adaptation — fast and free of
-        training cost but may miss domain-specific patterns. Fine-tuning
-        performs additional gradient updates on your domain data, updating
-        (some of) the model's weights to better capture your data's
-        distribution. This is sometimes called <em>few-shot adaptation</em>
-        when the domain dataset is small.
-      </DefinitionBlock>
+      <h2>When Fine-Tuning Helps</h2>
 
-      <FineTuningDecisionTree />
-
-      <h2 className="text-xl font-semibold mt-8 mb-3 text-gray-800">
-        When Fine-Tuning Helps
-      </h2>
-      <p className="text-gray-700 leading-relaxed">
-        Fine-tuning is most beneficial when:
-      </p>
-      <ul className="list-disc ml-6 mt-2 space-y-1 text-gray-700 text-sm">
-        <li>
-          <strong>Domain mismatch:</strong> your time series have patterns
-          (irregular spikes, unique seasonality, industrial dynamics) that are
-          underrepresented in TimeGPT's pre-training corpus.
-        </li>
-        <li>
-          <strong>Systematic bias:</strong> zero-shot forecasts are consistently
-          too high or too low — fine-tuning can correct this without full
-          retraining.
-        </li>
-        <li>
-          <strong>Abundant domain data:</strong> you have 100+ observations per
-          series or a panel of 10+ similar series — enough signal for adaptation
-          without overfitting.
-        </li>
-      </ul>
-
-      <h2 className="text-xl font-semibold mt-8 mb-3 text-gray-800">
-        Fine-Tuning Depth and Catastrophic Forgetting
-      </h2>
-      <p className="text-gray-700 leading-relaxed">
-        TimeGPT exposes a <code>finetune_depth</code> parameter (1–3) that
-        controls how many layers are updated:
-      </p>
-      <ul className="list-disc ml-6 mt-2 space-y-2 text-gray-700 text-sm">
-        <li><strong>Depth 1 (light):</strong> updates only the final output layers. Fast, low cost, minimal risk of forgetting pre-trained patterns.</li>
-        <li><strong>Depth 2 (medium):</strong> updates upper Transformer layers. Better adaptation for strong distribution shifts.</li>
-        <li><strong>Depth 3 (deep):</strong> updates most parameters. Maximum adaptation but high risk of catastrophic forgetting — avoid unless you have large, clean domain data.</li>
-      </ul>
-      <p className="text-gray-700 leading-relaxed mt-3">
-        <strong>Catastrophic forgetting</strong> occurs when aggressive
-        fine-tuning overwrites the general knowledge learned during pre-training,
-        causing the model to perform worse on series unlike the fine-tuning set.
-        Always evaluate on a held-out test set that is <em>not</em> part of
-        the fine-tuning data.
-      </p>
-
-      <TheoremBlock title="Transfer Learning Theory: Why Fine-Tuning Works">
-        <p>
-          Pre-trained model weights encode a rich prior over temporal dynamics
-          learned from billions of diverse time points. Fine-tuning on domain
-          data starts from this prior rather than from random initialization,
-          dramatically reducing the amount of domain data needed to achieve
-          good performance. Formally, if the pre-training distribution{' '}
-          <InlineMath math="P_\text{pre}" /> and target distribution{' '}
-          <InlineMath math="P_\text{target}" /> share structure, fine-tuning
-          requires only <InlineMath math="O(1/\epsilon^2)" /> domain examples
-          to achieve <InlineMath math="\epsilon" />-error, versus{' '}
-          <InlineMath math="O(1/\epsilon^2 \cdot \log(1/\delta))" /> from
-          scratch.
-        </p>
-      </TheoremBlock>
-
-      <h2 className="text-xl font-semibold mt-8 mb-3 text-gray-800">Implementation</h2>
-      <PythonCode code={fineTuningCode} />
-
-      <ExampleBlock title="Few-Shot Fine-Tuning with Limited Data">
-        <p className="text-sm text-gray-700">
-          If you have very few series or short history, use{' '}
-          <code>finetune_steps=10</code> and <code>finetune_depth=1</code>.
-          Light fine-tuning with few steps acts as a last-layer calibration
-          rather than full adaptation. Even 10–20 gradient steps on a few
-          hundred observations can reduce bias on domain-specific series without
-          risking catastrophic forgetting.
-        </p>
+      <ExampleBlock title="Strong candidates for fine-tuning">
+        <ul>
+          <li>
+            <strong>Unusual seasonality:</strong> fiscal-year cycles, religious holidays
+            (Ramadan, Lunar New Year, Diwali), industry-specific patterns absent from
+            public pre-training corpora.
+          </li>
+          <li>
+            <strong>Proprietary dynamics:</strong> internal sales cycles correlated with
+            marketing spend, promotion calendars, or business-specific triggers.
+          </li>
+          <li>
+            <strong>Systematic zero-shot bias:</strong> when TimeGPT consistently
+            over- or under-shoots on your data, gradient steps can re-calibrate
+            the output distribution without changing the architecture.
+          </li>
+          <li>
+            <strong>Long history available:</strong> series with 200+ observations provide
+            enough signal for adaptation without memorizing noise.
+          </li>
+        </ul>
       </ExampleBlock>
 
-      <WarningBlock title="Fine-Tuning Cost Can Surprise You">
-        Fine-tuning consumes tokens proportional to{' '}
-        <code>finetune_steps × observations_in_dataset</code>. With 30 series
-        × 200 steps × 50 fine-tuning steps = 300,000 token operations. Always
-        check Nixtla's current pricing tier before submitting a large fine-tuning
-        job. Use <code>finetune_steps=10</code> for a quick cost-accuracy check
-        before scaling up.
+      <ExampleBlock title="When zero-shot is likely better">
+        <ul>
+          <li>Very short series ({'<'} 50 obs) — not enough signal to adapt without overfitting.</li>
+          <li>Cold-start: new series with no historical data at all.</li>
+          <li>Standard retail or energy patterns well-represented in pre-training data.</li>
+          <li>Cost-sensitive pipelines — fine-tuned API calls are billed at a higher rate.</li>
+        </ul>
+      </ExampleBlock>
+
+      <h2>The <code>finetune_steps</code> Parameter</h2>
+
+      <p>
+        Fine-tuning runs <InlineMath>{`K`}</InlineMath> gradient steps on your
+        training data, starting from pre-trained TimeGPT weights <InlineMath>{`\\theta_0`}</InlineMath>.
+        The optimizer is AdamW with a cosine-decay learning rate schedule:
+      </p>
+
+      <BlockMath>{`\\theta_{k+1} = \\theta_k - \\eta_k \\,\\nabla_\\theta \\mathcal{L}(y, \\hat{y}(\\theta_k))`}</BlockMath>
+
+      <BlockMath>{`\\eta_k = \\eta_{\\min} + \\tfrac{1}{2}(\\eta_0 - \\eta_{\\min})\\!\\left(1 + \\cos\\frac{\\pi k}{K}\\right)`}</BlockMath>
+
+      <p>
+        Nixtla servers manage <InlineMath>{`\\eta_0 \\approx 10^{-4}`}</InlineMath>, small
+        enough to prevent <em>catastrophic forgetting</em> of pre-trained representations
+        while still shifting the output layers toward domain-specific patterns.
+      </p>
+
+      <h3>Simulated Loss Curves</h3>
+      <p>Select a step-count scenario to see typical train vs validation behaviour:</p>
+
+      <div style={{ marginBottom: '1rem' }}>
+        {Object.entries(SCENARIOS).map(([k, v]) => (
+          <button
+            key={k}
+            onClick={() => setActiveSteps(Number(k))}
+            style={{
+              margin: '0.2rem', padding: '0.3rem 1rem', borderRadius: '4px', cursor: 'pointer',
+              border: `1px solid ${v.color}`,
+              background: activeSteps === Number(k) ? v.color : '#fff',
+              color: activeSteps === Number(k) ? '#fff' : v.color,
+            }}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+
+      <ResponsiveContainer width="100%" height={270}>
+        <LineChart data={scenario.data} margin={{ top: 5, right: 20, left: 0, bottom: 16 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="step" label={{ value: 'Gradient steps', position: 'insideBottom', offset: -8 }} />
+          <YAxis domain={[0.04, 0.52]} tickFormatter={(v) => v.toFixed(2)} />
+          <Tooltip formatter={(v) => v.toFixed(4)} />
+          <Legend verticalAlign="top" />
+          <Line dataKey="train" name="Train Loss" stroke="#6366f1" dot={false} strokeWidth={2} />
+          <Line dataKey="val"   name="Val Loss"   stroke="#f59e0b" dot={false} strokeWidth={2} />
+          {activeSteps === 150 && (
+            <ReferenceLine x={40} stroke="#ef4444" strokeDasharray="5 5"
+              label={{ value: 'Overfit onset', fill: '#ef4444', fontSize: 11, position: 'insideTopRight' }} />
+          )}
+        </LineChart>
+      </ResponsiveContainer>
+
+      <WarningBlock title="Overfitting on Short Series">
+        Too many fine-tuning steps on short series causes the model to memorize
+        training-set idiosyncrasies. A typical safe range is <strong>10–100 steps</strong>.
+        Always verify with cross-validation (≥ 3 windows) rather than guessing.
       </WarningBlock>
 
-      <NoteBlock title="Evaluating Fine-Tuning Benefit">
-        <ul className="list-disc ml-5 space-y-1 text-sm">
-          <li>Always compare fine-tuned vs. zero-shot on a held-out test window before deploying.</li>
-          <li>Use multiple validation windows (<code>n_windows=3</code>) — a single window can be misleading.</li>
-          <li>If fine-tuning does not improve over zero-shot on the held-out window, skip it — the pre-trained model is already well-calibrated for your domain.</li>
-          <li>Re-fine-tune periodically if the underlying distribution drifts (e.g., post-pandemic consumer behavior changes).</li>
-        </ul>
+      <h2>Choosing <code>finetune_loss</code></h2>
+
+      <div style={{ marginBottom: '0.75rem' }}>
+        {LOSS_OPTIONS.map((l) => (
+          <button
+            key={l.name}
+            onClick={() => setActiveLoss(l.name)}
+            style={{
+              margin: '0.2rem', padding: '0.25rem 0.7rem', borderRadius: '4px', cursor: 'pointer',
+              border: '1px solid #8b5cf6',
+              background: activeLoss === l.name ? '#8b5cf6' : '#fff',
+              color: activeLoss === l.name ? '#fff' : '#8b5cf6',
+            }}
+          >
+            {l.name}
+          </button>
+        ))}
+      </div>
+
+      {lossInfo && (
+        <div style={{
+          background: '#f5f3ff', border: '1px solid #8b5cf6',
+          borderRadius: '6px', padding: '0.75rem 1rem', marginBottom: '1.5rem',
+        }}>
+          <strong>{lossInfo.name}:</strong> {lossInfo.desc}
+        </div>
+      )}
+
+      <NoteBlock title="Loss Function vs Evaluation Metric">
+        <code>finetune_loss</code> is what gets minimized during gradient updates.
+        Your holdout <em>evaluation metric</em> (MASE, WQL, CRPS) is separate.
+        A common pattern: fine-tune with MAE, evaluate with MASE or WQL on the
+        holdout to compare zero-shot against fine-tuned.
       </NoteBlock>
 
-      <ReferenceList references={[
-        { author: 'Garza, A., & Mergenthaler-Canseco, M.', year: 2023, title: 'TimeGPT-1', venue: 'arXiv' },
-        { author: 'Kumar, A., et al.', year: 2022, title: 'Fine-Tuning Distorts Pretrained Features and Underperforms Out-of-Distribution', venue: 'ICLR' },
-        { author: 'Bommasani, R., et al.', year: 2022, title: 'On the Opportunities and Risks of Foundation Models', venue: 'arXiv' },
-      ]} />
+      <h2>Cost Implications</h2>
+
+      <DefinitionBlock term="Fine-Tuning Cost Structure">
+        Nixtla bills fine-tuning compute and inference separately:
+        <ul>
+          <li>Fine-tuning cost scales with <InlineMath>{`K \\times N_{\\text{series}} \\times T_{\\text{avg}}`}</InlineMath></li>
+          <li>Inference with fine-tuned weights costs approximately 2× standard inference</li>
+          <li>Weights are cached server-side for a session window; subsequent calls reuse cached weights</li>
+        </ul>
+        Measure MASE improvement vs extra cost before committing fine-tuned inference at scale.
+      </DefinitionBlock>
+
+      <h2>Evaluation Protocol</h2>
+
+      <TheoremBlock title="Cross-Validation Protocol for Step Selection">
+        <ol>
+          <li>Partition data into <InlineMath>{`W \\geq 3`}</InlineMath> time-series cross-validation windows.</li>
+          <li>Evaluate step counts <InlineMath>{`K \\in \\{0, 10, 50, 100, 200\\}`}</InlineMath> (K=0 is the zero-shot baseline).</li>
+          <li>Select the smallest K achieving near-minimum average validation MASE — prefer fewer steps when the gain plateaus (Occam's razor).</li>
+          <li>If the fine-tuned and zero-shot MASE differ by less than one standard error across windows, use zero-shot to avoid added cost and complexity.</li>
+        </ol>
+      </TheoremBlock>
+
+      <PythonCode code={code} title="TimeGPT Fine-Tuning with Cross-Validation Step Selection" />
+
+      <ReferenceList
+        references={[
+          {
+            title: 'TimeGPT-1: The First Foundation Model for Time Series Forecasting',
+            authors: 'Garza, Challu, Mergenthaler-Canseco',
+            year: 2023,
+            venue: 'arXiv:2310.03589',
+          },
+          {
+            title: 'Decoupled Weight Decay Regularization (AdamW)',
+            authors: 'Loshchilov & Hutter',
+            year: 2019,
+            venue: 'ICLR 2019',
+          },
+          {
+            title: 'Nixtla Documentation: Fine-Tuning TimeGPT',
+            authors: 'Nixtla Engineering Team',
+            year: 2024,
+            venue: 'docs.nixtla.io',
+          },
+        ]}
+      />
     </SectionLayout>
   );
 }

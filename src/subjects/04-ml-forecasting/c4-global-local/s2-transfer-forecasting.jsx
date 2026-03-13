@@ -9,6 +9,17 @@ import NoteBlock from '../../../components/content/NoteBlock.jsx';
 import WarningBlock from '../../../components/content/WarningBlock.jsx';
 import PythonCode from '../../../components/content/PythonCode.jsx';
 import ReferenceList from '../../../components/content/ReferenceList.jsx';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+// MAE vs target observations: cold-start comparison of transfer approaches
+const coldStartChartData = [
+  { n: 7,   zeroShot: 2.4, finetune: 2.1, featureXfer: 2.0, local: 12.0 },
+  { n: 14,  zeroShot: 2.2, finetune: 1.9, featureXfer: 1.8, local: 6.5 },
+  { n: 30,  zeroShot: 2.1, finetune: 1.7, featureXfer: 1.6, local: 3.2 },
+  { n: 60,  zeroShot: 2.1, finetune: 1.5, featureXfer: 1.5, local: 2.1 },
+  { n: 120, zeroShot: 2.0, finetune: 1.4, featureXfer: 1.4, local: 1.6 },
+  { n: 250, zeroShot: 2.0, finetune: 1.3, featureXfer: 1.3, local: 1.3 },
+];
 
 const conceptCode = `# Transfer learning for time series:
 # 1. Pre-train a global model on a large, diverse dataset (source domain)
@@ -353,6 +364,31 @@ export default function TransferForecasting() {
       </p>
 
       <PythonCode code={fewShotCode} title="Few-Shot Forecasting with Global Model" />
+
+      {/* Cold-start performance chart */}
+      <div style={{ margin: '1rem 0', padding: '0.75rem', background: '#0f172a', borderRadius: '8px', border: '1px solid #334155' }}>
+        <p style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+          MAE vs Target Observations: Transfer Approaches vs Local-Only (Illustrative)
+        </p>
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={coldStartChartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" />
+            <XAxis dataKey="n" stroke="#94a3b8" tick={{ fontSize: 10 }} label={{ value: 'Target obs', fill: '#64748b', position: 'insideBottom', offset: -2 }} />
+            <YAxis stroke="#94a3b8" tick={{ fontSize: 10 }} domain={[0, 14]} label={{ value: 'MAE', angle: -90, fill: '#64748b', position: 'insideLeft' }} />
+            <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', color: '#e2e8f0', fontSize: 11 }} />
+            <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 11 }} />
+            <Line type="monotone" dataKey="local"      stroke="#ef4444" dot={false} name="Local only" strokeWidth={2} strokeDasharray="4 2" />
+            <Line type="monotone" dataKey="zeroShot"   stroke="#60a5fa" dot={false} name="Zero-shot" strokeWidth={2} />
+            <Line type="monotone" dataKey="finetune"   stroke="#34d399" dot={false} name="Fine-tuned" strokeWidth={2} />
+            <Line type="monotone" dataKey="featureXfer" stroke="#fbbf24" dot={false} name="Feature transfer" strokeWidth={2} />
+          </LineChart>
+        </ResponsiveContainer>
+        <p style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '0.4rem' }}>
+          Local-only model degrades sharply for fewer than ~60 obs. All transfer approaches maintain
+          acceptable accuracy even with 7-14 observations. Feature transfer consistently wins over
+          zero-shot when any target data is available.
+        </p>
+      </div>
 
       <h2 className="text-xl font-semibold text-white mt-8 mb-3">Neural vs. Tree Transfer Learning</h2>
       <p className="text-zinc-300 leading-relaxed">

@@ -9,6 +9,17 @@ import NoteBlock from '../../../components/content/NoteBlock.jsx';
 import WarningBlock from '../../../components/content/WarningBlock.jsx';
 import PythonCode from '../../../components/content/PythonCode.jsx';
 import ReferenceList from '../../../components/content/ReferenceList.jsx';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+// Cross-learning benefit: MASE vs number of series (illustrative)
+const crossLearningBenefitData = [
+  { nSeries: 10,   global: 1.35, local: 1.40 },
+  { nSeries: 50,   global: 1.15, local: 1.40 },
+  { nSeries: 100,  global: 1.02, local: 1.38 },
+  { nSeries: 500,  global: 0.88, local: 1.37 },
+  { nSeries: 1000, global: 0.80, local: 1.36 },
+  { nSeries: 5000, global: 0.74, local: 1.35 },
+];
 
 function GlobalLocalComparison() {
   const [nSeries, setNSeries] = useState(100);
@@ -289,6 +300,28 @@ export default function GlobalModels() {
       <BlockMath math={String.raw`\text{Effective sample size} = \sum_{i=1}^{N} T_i \gg T_i \quad \text{for any single series } i`} />
 
       <PythonCode code={crossLearningCode} title="Cross-Learning Benefit for Short Series" />
+
+      {/* Cross-learning benefit chart */}
+      <div style={{ margin: '1rem 0', padding: '0.75rem', background: '#0f172a', borderRadius: '8px', border: '1px solid #334155' }}>
+        <p style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+          Cross-Learning Benefit: MASE vs Number of Series (T=50 each, illustrative)
+        </p>
+        <ResponsiveContainer width="100%" height={210}>
+          <LineChart data={crossLearningBenefitData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" />
+            <XAxis dataKey="nSeries" stroke="#94a3b8" tick={{ fontSize: 10 }} label={{ value: 'Number of Series', fill: '#64748b', position: 'insideBottom', offset: -2 }} />
+            <YAxis stroke="#94a3b8" tick={{ fontSize: 10 }} domain={[0.6, 1.5]} label={{ value: 'MASE', angle: -90, fill: '#64748b', position: 'insideLeft' }} />
+            <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', color: '#e2e8f0', fontSize: 11 }} />
+            <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 11 }} />
+            <Line type="monotone" dataKey="global" stroke="#34d399" dot={true} name="Global (LightGBM)" strokeWidth={2} />
+            <Line type="monotone" dataKey="local"  stroke="#94a3b8" dot={false} name="Local (per-series)" strokeWidth={2} strokeDasharray="5 3" />
+          </LineChart>
+        </ResponsiveContainer>
+        <p style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '0.4rem' }}>
+          As the number of series grows, the global model improves dramatically via cross-learning.
+          Local models are unaffected by N since they never see data from other series.
+        </p>
+      </div>
 
       <TheoremBlock title="When Global Models Win">
         Global models consistently outperform local models when:
