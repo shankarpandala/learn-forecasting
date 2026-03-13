@@ -9,6 +9,53 @@ import NoteBlock from '../../../components/content/NoteBlock.jsx';
 import WarningBlock from '../../../components/content/WarningBlock.jsx';
 import PythonCode from '../../../components/content/PythonCode.jsx';
 import ReferenceList from '../../../components/content/ReferenceList.jsx';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+// Error accumulation chart: recursive MAE grows with horizon; direct stays flat
+function buildErrorData(maxH = 20, baseError = 1.0, growthRate = 0.12) {
+  return Array.from({ length: maxH }, (_, i) => {
+    const h = i + 1;
+    return {
+      h,
+      recursive: parseFloat((baseError * Math.pow(1 + growthRate, h - 1)).toFixed(3)),
+      direct:    parseFloat((baseError * (1 + 0.01 * (h - 1))).toFixed(3)),
+      dirrec:    parseFloat((baseError * (1 + 0.05 * (h - 1))).toFixed(3)),
+    };
+  });
+}
+
+function ErrorPropagationChart() {
+  const [maxH, setMaxH] = useState(14);
+  const data = buildErrorData(maxH);
+  return (
+    <div style={{ margin: '1.5rem 0', padding: '1rem', background: '#0f172a', borderRadius: '8px', border: '1px solid #334155' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
+        <span style={{ color: '#cbd5e1', fontSize: '0.9rem', fontWeight: 600 }}>Error vs Horizon</span>
+        <label style={{ color: '#94a3b8', fontSize: '0.82rem' }}>
+          Max horizon: <span style={{ color: '#38bdf8', fontWeight: 'bold' }}>{maxH}</span>
+        </label>
+        <input type="range" min={5} max={28} value={maxH} onChange={e => setMaxH(Number(e.target.value))}
+          style={{ width: '100px', accentColor: '#38bdf8' }} />
+      </div>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" />
+          <XAxis dataKey="h" stroke="#94a3b8" label={{ value: 'Horizon h', fill: '#94a3b8', position: 'insideBottom', offset: -2 }} />
+          <YAxis stroke="#94a3b8" />
+          <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', color: '#e2e8f0' }} />
+          <Legend wrapperStyle={{ color: '#94a3b8' }} />
+          <Line type="monotone" dataKey="recursive" stroke="#f87171" dot={false} strokeWidth={2} name="Recursive (error compounds)" />
+          <Line type="monotone" dataKey="direct"    stroke="#34d399" dot={false} strokeWidth={2} name="Direct (stable)" />
+          <Line type="monotone" dataKey="dirrec"    stroke="#fbbf24" dot={false} strokeWidth={2} name="DirRec (moderate growth)" />
+        </LineChart>
+      </ResponsiveContainer>
+      <p style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '0.4rem' }}>
+        Simulated relative MAE normalised to h=1. Recursive error grows exponentially; Direct stays flat
+        since each model predicts directly from observed history.
+      </p>
+    </div>
+  );
+}
 
 function StrategyComparison() {
   const [horizon, setHorizon] = useState(7);
@@ -260,6 +307,8 @@ export default function ForecastStrategies() {
       </DefinitionBlock>
 
       <PythonCode code={recursiveCode} title="Recursive Multi-Step Forecasting" />
+
+      <ErrorPropagationChart />
 
       <WarningBlock title="Error Accumulation in Recursive Forecasting">
         For horizons beyond 7–14 steps, recursive strategy can degrade significantly

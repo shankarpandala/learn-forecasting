@@ -9,6 +9,18 @@ import NoteBlock from '../../../components/content/NoteBlock.jsx';
 import WarningBlock from '../../../components/content/WarningBlock.jsx';
 import PythonCode from '../../../components/content/PythonCode.jsx';
 import ReferenceList from '../../../components/content/ReferenceList.jsx';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+// Illustrative coherence gaps: base forecasts vs reconciled for 7 series
+const coherenceData = [
+  { name: 'Total',    base: 348, ols: 336, wls: 338, mint: 340, actual: 341 },
+  { name: 'ProdA',   base: 200, ols: 196, wls: 197, mint: 198, actual: 199 },
+  { name: 'ProdB',   base: 158, ols: 140, wls: 141, mint: 142, actual: 142 },
+  { name: 'A-North', base: 115, ols: 112, wls: 113, mint: 114, actual: 113 },
+  { name: 'A-South', base:  88, ols:  84, wls:  84, mint:  85, actual:  86 },
+  { name: 'B-North', base:  83, ols:  78, wls:  79, mint:  79, actual:  80 },
+  { name: 'B-South', base:  62, ols:  62, wls:  62, mint:  63, actual:  62 },
+];
 
 const reconciliationCode = `import numpy as np
 import pandas as pd
@@ -323,6 +335,30 @@ export default function ForecastReconciliation() {
         provided <InlineMath math="\mathbf{SPS} = \mathbf{S}" /> — a condition satisfied by the
         WLS estimator of <InlineMath math="\mathbf{P}" />.
       </TheoremBlock>
+
+      {/* Recharts: base vs reconciled comparison */}
+      <div style={{ margin: '1.5rem 0', padding: '1rem', background: '#faf5ff', borderRadius: '8px', border: '1px solid #e9d5ff' }}>
+        <h3 style={{ fontWeight: 600, marginBottom: '0.75rem', fontSize: '0.95rem' }}>
+          Base vs Reconciled Forecasts (Illustrative)
+        </h3>
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={coherenceData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Bar dataKey="base"   fill="#f97316" name="Base (incoherent)" />
+            <Bar dataKey="ols"    fill="#2563eb" name="OLS reconciled" />
+            <Bar dataKey="mint"   fill="#7c3aed" name="MinT reconciled" />
+            <Bar dataKey="actual" fill="#374151" name="Actual" />
+          </BarChart>
+        </ResponsiveContainer>
+        <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.5rem' }}>
+          Base forecasts are incoherent (ProdA+ProdB ≠ Total). All reconciled forecasts are coherent
+          by construction; MinT stays closest to actuals by leveraging covariance information.
+        </p>
+      </div>
 
       <h2>OLS Reconciliation</h2>
       <p>
