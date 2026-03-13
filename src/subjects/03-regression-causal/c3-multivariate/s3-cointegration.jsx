@@ -9,6 +9,23 @@ import NoteBlock from '../../../components/content/NoteBlock.jsx';
 import WarningBlock from '../../../components/content/WarningBlock.jsx';
 import PythonCode from '../../../components/content/PythonCode.jsx';
 import ReferenceList from '../../../components/content/ReferenceList.jsx';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+
+// Generate two cointegrated I(1) series and their mean-reverting spread
+function generateCointegratedData(n = 100, seed = 42) {
+  let rng = seed;
+  const rand = () => { rng = (rng * 1664525 + 1013904223) & 0xffffffff; return (rng >>> 0) / 0xffffffff * 2 - 1; };
+  const data = [];
+  let trend = 0, x = 0, y = 0;
+  for (let i = 0; i < n; i++) {
+    trend += rand() * 1.2;
+    x = trend + rand() * 0.5;
+    y = 2 * trend - 1 + rand() * 0.5;
+    const spread = x - 0.5 * y + 1; // beta=(1,-0.5), intercept=1 → I(0)
+    data.push({ t: i, x: parseFloat(x.toFixed(2)), y: parseFloat(y.toFixed(2)), spread: parseFloat(spread.toFixed(2)) });
+  }
+  return data;
+}
 
 const cointegrationCode = `import numpy as np
 import pandas as pd
@@ -149,6 +166,8 @@ const references = [
 
 export default function Cointegration() {
   const [activeTab, setActiveTab] = useState('concept');
+  const [showSpread, setShowSpread] = useState(false);
+  const cointData = generateCointegratedData(100);
 
   return (
     <SectionLayout
@@ -286,6 +305,55 @@ export default function Cointegration() {
             </p>
           </div>
         )}
+      </div>
+
+      {/* Interactive Visualization */}
+      <div style={{ margin: '1.5rem 0', padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+        <h3 style={{ fontWeight: 600, marginBottom: '0.75rem', fontSize: '0.95rem' }}>
+          Interactive: Cointegrated Series and Spread
+        </h3>
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+          <button
+            onClick={() => setShowSpread(false)}
+            style={{ padding: '0.3rem 0.9rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
+              background: !showSpread ? '#0891b2' : '#e2e8f0', color: !showSpread ? 'white' : '#374151', fontWeight: !showSpread ? 'bold' : 'normal' }}
+          >
+            Raw Series (I(1))
+          </button>
+          <button
+            onClick={() => setShowSpread(true)}
+            style={{ padding: '0.3rem 0.9rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
+              background: showSpread ? '#0891b2' : '#e2e8f0', color: showSpread ? 'white' : '#374151', fontWeight: showSpread ? 'bold' : 'normal' }}
+          >
+            Spread / ECT (I(0))
+          </button>
+        </div>
+        <ResponsiveContainer width="100%" height={240}>
+          {showSpread ? (
+            <LineChart data={cointData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="t" label={{ value: 'Time', position: 'insideBottom', offset: -2 }} />
+              <YAxis />
+              <Tooltip />
+              <ReferenceLine y={0} stroke="#64748b" strokeDasharray="4 2" />
+              <Line type="monotone" dataKey="spread" stroke="#7c3aed" dot={false} name="Spread x − 0.5y + 1" strokeWidth={2} />
+            </LineChart>
+          ) : (
+            <LineChart data={cointData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="t" label={{ value: 'Time', position: 'insideBottom', offset: -2 }} />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="x" stroke="#2563eb" dot={false} name="x  (I(1))" strokeWidth={2} />
+              <Line type="monotone" dataKey="y" stroke="#16a34a" dot={false} name="y  (I(1))" strokeWidth={2} />
+            </LineChart>
+          )}
+        </ResponsiveContainer>
+        <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.5rem' }}>
+          Both x and y are I(1) random walks with a shared stochastic trend. Their linear combination
+          x − 0.5y + 1 is mean-reverting I(0) — the cointegrating relationship (error correction term).
+        </p>
       </div>
 
       <TheoremBlock

@@ -2,215 +2,224 @@ import React, { useState } from 'react';
 import { BlockMath, InlineMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
 import SectionLayout from '../../../components/content/SectionLayout.jsx';
-import TheoremBlock from '../../../components/content/TheoremBlock.jsx';
 import DefinitionBlock from '../../../components/content/DefinitionBlock.jsx';
+import TheoremBlock from '../../../components/content/TheoremBlock.jsx';
 import ExampleBlock from '../../../components/content/ExampleBlock.jsx';
 import NoteBlock from '../../../components/content/NoteBlock.jsx';
 import WarningBlock from '../../../components/content/WarningBlock.jsx';
 import PythonCode from '../../../components/content/PythonCode.jsx';
 import ReferenceList from '../../../components/content/ReferenceList.jsx';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-export default function TimeGPTIntro() {
+function APICapabilityGrid() {
+  const caps = [
+    { title: 'Point Forecasting', desc: 'Zero-shot multi-step forecasts for any frequency — hourly, daily, weekly, monthly.' },
+    { title: 'Prediction Intervals', desc: 'Quantile forecasts (P10–P90) and confidence intervals from a single API call.' },
+    { title: 'Anomaly Detection', desc: 'Detects anomalous observations by comparing actuals to model expectations.' },
+    { title: 'Exogenous Variables', desc: 'Include future-known covariates (holidays, promotions) to improve accuracy.' },
+    { title: 'Cross-Validation', desc: 'Rolling-window CV for offline model evaluation without additional training.' },
+    { title: 'Fine-Tuning', desc: 'Domain-specific adaptation using your own time series data (paid tier).' },
+  ];
+  return (
+    <div className="my-6 grid grid-cols-2 md:grid-cols-3 gap-3">
+      {caps.map(c => (
+        <div key={c.title} className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+          <p className="text-sm font-semibold text-purple-800 mb-1">{c.title}</p>
+          <p className="text-xs text-purple-700">{c.desc}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const timeGPTCode = `# pip install nixtla
+from nixtla import NixtlaClient
+import pandas as pd
+import numpy as np
+
+client = NixtlaClient(api_key='YOUR_NIXTLA_API_KEY')
+
+# ── 1. Basic zero-shot forecast ───────────────────────────────────────────
+np.random.seed(42)
+T = 200
+dates = pd.date_range('2021-01-01', periods=T, freq='D')
+t = np.arange(T)
+y = 100 + 0.1*t + 10*np.sin(2*np.pi*t/7) + 2*np.random.randn(T)
+df = pd.DataFrame({'unique_id': 'demo', 'ds': dates, 'y': y})
+
+forecast = client.forecast(df, h=14, freq='D')
+print(forecast)
+# unique_id  ds          TimeGPT
+# demo       2021-07-21  108.32  ...
+
+# ── 2. Prediction intervals ────────────────────────────────────────────────
+forecast_pi = client.forecast(df, h=14, freq='D', level=[80, 90, 95])
+print(forecast_pi.columns.tolist())
+# ['unique_id', 'ds', 'TimeGPT',
+#  'TimeGPT-lo-80', 'TimeGPT-hi-80',
+#  'TimeGPT-lo-90', 'TimeGPT-hi-90', ...]
+
+# ── 3. With exogenous (future-known) variables ────────────────────────────
+df['is_weekend'] = (pd.DatetimeIndex(df['ds']).dayofweek >= 5).astype(float)
+
+future_dates = pd.date_range(dates[-1] + pd.Timedelta('1D'), periods=14, freq='D')
+future_df = pd.DataFrame({
+    'unique_id': 'demo',
+    'ds': future_dates,
+    'is_weekend': (pd.DatetimeIndex(future_dates).dayofweek >= 5).astype(float),
+})
+
+forecast_exog = client.forecast(df, h=14, freq='D', X_df=future_df, level=[90])
+print(forecast_exog.head())
+
+# ── 4. Panel (multi-series) forecast ──────────────────────────────────────
+panel = pd.concat([
+    pd.DataFrame({
+        'unique_id': f'series_{i}',
+        'ds': pd.date_range('2022-01-01', periods=52, freq='W'),
+        'y': 50 + 10*i + 5*np.sin(2*np.pi*np.arange(52)/52) + np.random.randn(52),
+    })
+    for i in range(10)
+])
+
+panel_forecast = client.forecast(panel, h=8, freq='W')
+print(f"Panel forecast shape: {panel_forecast.shape}")   # (80, 3)
+
+# ── 5. Anomaly detection ──────────────────────────────────────────────────
+df_anom = df.copy()
+df_anom.loc[100, 'y'] = 500.0   # inject spike
+
+anomalies = client.detect_anomalies(df_anom, freq='D')
+flagged = anomalies[anomalies['anomaly'] == 1]
+print(flagged[['ds', 'y', 'TimeGPT', 'anomaly']])
+
+# ── 6. Cross-validation ────────────────────────────────────────────────────
+cv = client.cross_validation(df, h=14, freq='D', n_windows=3, step_size=14)
+actuals  = cv['y'].values
+preds    = cv['TimeGPT'].values
+mae_val  = np.mean(np.abs(preds - actuals))
+print(f"CV MAE: {mae_val:.3f}")
+`;
+
+export default function TimeGPTIntroSection() {
   return (
     <SectionLayout
-      title="TimeGPT: The First Foundation Model for Time Series"
+      title="TimeGPT: Zero-Shot Forecasting"
       difficulty="intermediate"
-      readingTime={30}
-      prerequisites={['Foundation model concepts (c1-s1)', 'Transformer architecture basics']}
+      readingTime={12}
     >
       <p className="text-gray-700 leading-relaxed">
-        TimeGPT (Garza et al., 2023) was the first foundation model specifically designed for
-        time series forecasting. Released by Nixtla, it demonstrated that a single pre-trained
-        model could achieve competitive zero-shot accuracy across finance, energy, retail, and
-        weather datasets — without any fine-tuning on the target domain.
-      </p>
-
-      <h2 className="text-2xl font-bold text-gray-800 mt-8 mb-4">Architecture Overview</h2>
-      <p className="text-gray-700 leading-relaxed">
-        TimeGPT uses an <strong>encoder-decoder Transformer</strong> architecture:
+        TimeGPT (Garza & Mergenthaler-Canseco, 2023) is the first commercially
+        available foundation model for time series forecasting. Developed by
+        Nixtla, it was pre-trained on a proprietary corpus of over{' '}
+        <strong>100 billion time points</strong> from diverse domains, enabling
+        zero-shot forecasting on any series via a simple REST API — no training
+        required.
       </p>
 
       <DefinitionBlock title="TimeGPT Architecture">
-        <ul className="list-disc pl-5 space-y-2">
-          <li><strong>Encoder:</strong> processes the historical window <InlineMath math="x_{1:T}" /> using multi-head self-attention and feed-forward layers. Produces a latent representation capturing temporal patterns.</li>
-          <li><strong>Decoder:</strong> attends to the encoder output via cross-attention, generating the forecast <InlineMath math="\hat{y}_{T+1:T+H}" /> autoregressively or in a single forward pass.</li>
-          <li><strong>Local normalization:</strong> each input window is normalized by its mean and standard deviation, then denormalized at output — enabling handling of diverse value scales across series.</li>
-        </ul>
+        TimeGPT is a Transformer-based encoder-decoder. The encoder processes
+        the historical context window, and the decoder generates the multi-step
+        forecast. Unlike domain-specific DL models, TimeGPT's weights are fixed
+        at deployment — users access it through an API and never need to
+        train or fine-tune (unless they choose to).
       </DefinitionBlock>
 
-      <p className="text-gray-700 leading-relaxed mt-4">
-        The key design choices that enable generalization across datasets:
-      </p>
-      <ul className="list-disc pl-6 mt-3 space-y-2 text-gray-700">
-        <li><strong>Instance normalization:</strong> input <InlineMath math="x \leftarrow (x - \mu_x)/\sigma_x" /> removes series-specific scale and offset, making the model distribution-agnostic</li>
-        <li><strong>Flexible context window:</strong> handles variable-length inputs up to a maximum context length</li>
-        <li><strong>Multi-frequency training:</strong> trained on series with diverse frequencies (hourly, daily, weekly, monthly, yearly)</li>
-        <li><strong>Anomaly handling:</strong> robust training with winsorization of extreme values</li>
-      </ul>
+      <h2 className="text-xl font-semibold mt-8 mb-3 text-gray-800">API Capabilities</h2>
+      <APICapabilityGrid />
 
-      <h2 className="text-2xl font-bold text-gray-800 mt-8 mb-4">Training Data</h2>
+      <h2 className="text-xl font-semibold mt-8 mb-3 text-gray-800">
+        How TimeGPT Generates Forecasts
+      </h2>
       <p className="text-gray-700 leading-relaxed">
-        TimeGPT was trained on a massive, diverse corpus of time series:
+        Given an input context{' '}
+        <InlineMath math="(x_{t-L}, \dots, x_t)" />, TimeGPT normalizes the
+        sequence to remove scale effects (similar to RevIN), encodes it via
+        multi-head attention, and decodes a multi-step forecast. The
+        normalization is applied and reversed automatically, allowing the model
+        to generalize across series with very different magnitudes.
       </p>
-      <ul className="list-disc pl-6 mt-3 space-y-2 text-gray-700">
-        <li>Over 100 billion data points across multiple domains</li>
-        <li>Sources: finance (stock prices, FX rates), energy (electricity, gas), retail (sales, transactions), weather, web traffic, and more</li>
-        <li>Multiple temporal frequencies from seconds to years</li>
-        <li>Both stationary and non-stationary series, with various trend/seasonality combinations</li>
-      </ul>
-
-      <NoteBlock title="Why Scale Matters">
-        The diversity of training data is more important than sheer volume. TimeGPT's strong
-        zero-shot performance on retail data (despite being trained on many other domains) suggests
-        the model learns general temporal patterns — periodicity, trend behavior, volatility regimes
-        — rather than domain-specific facts. This is analogous to how GPT learns "language" rather
-        than domain facts.
-      </NoteBlock>
-
-      <h2 className="text-2xl font-bold text-gray-800 mt-8 mb-4">The Nixtla API</h2>
-      <p className="text-gray-700 leading-relaxed">
-        TimeGPT is accessed via the Nixtla cloud API using the <code>nixtla</code> Python client.
-        The API design mirrors the <code>neuralforecast</code> interface: long-format DataFrames
-        with <code>unique_id</code>, <code>ds</code>, <code>y</code> columns.
+      <p className="text-gray-700 leading-relaxed mt-3">
+        Because TimeGPT was pre-trained on diverse domains, it implicitly
+        recognizes common patterns without being told the domain: daily
+        seasonality in energy data, weekly retail cycles, monthly economic
+        trends.
       </p>
 
-      <PythonCode>{`# Install: pip install nixtla
-import pandas as pd
-import numpy as np
-from nixtla import NixtlaClient
-
-# ── Authenticate ───────────────────────────────────────────────────────────────
-client = NixtlaClient(api_key='your_api_key_here')  # Get at dashboard.nixtla.io
-# Or set env variable: export NIXTLA_API_KEY='...'
-
-# ── Basic zero-shot forecasting ────────────────────────────────────────────────
-# Prepare long-format DataFrame
-df = pd.DataFrame({
-    'unique_id': ['series_1'] * 120,
-    'ds': pd.date_range('2020-01-01', periods=120, freq='ME'),
-    'y': np.random.randn(120).cumsum() + 100,
-})
-
-# Zero-shot forecast: no training needed!
-forecasts = client.forecast(
-    df=df,
-    h=12,                   # Forecast 12 months
-    freq='ME',              # Monthly end frequency
-    time_col='ds',
-    target_col='y',
-    id_col='unique_id',
-    level=[80, 95],         # Return 80% and 95% prediction intervals
-)
-print(forecasts.head())
-# unique_id          ds  TimeGPT  TimeGPT-lo-80  TimeGPT-hi-80  ...
-
-# ── Multiple series ────────────────────────────────────────────────────────────
-n_series = 50
-dfs = []
-for i in range(n_series):
-    dfs.append(pd.DataFrame({
-        'unique_id': [f'series_{i}'] * 60,
-        'ds': pd.date_range('2021-01-01', periods=60, freq='W'),
-        'y': np.sin(np.arange(60) * 0.3 + i) * 10 + np.random.randn(60),
-    }))
-multi_df = pd.concat(dfs, ignore_index=True)
-
-# Single API call forecasts all 50 series simultaneously
-multi_forecasts = client.forecast(
-    df=multi_df,
-    h=8,
-    freq='W',
-    level=[95],
-)
-print(f"Forecasts shape: {multi_forecasts.shape}")
-# (400, 5) = 50 series × 8 steps × columns
-
-# ── With exogenous covariates ──────────────────────────────────────────────────
-# Future-known covariates must span the forecast horizon
-df_with_cov = df.copy()
-df_with_cov['promotion'] = (np.arange(120) % 12 == 0).astype(float)
-df_with_cov['month_sin'] = np.sin(2 * np.pi * df['ds'].dt.month / 12)
-
-# Future covariates DataFrame (for the forecast horizon)
-future_dates = pd.date_range(df['ds'].max(), periods=13, freq='ME')[1:]
-future_df = pd.DataFrame({
-    'unique_id': ['series_1'] * 12,
-    'ds': future_dates,
-    'promotion': 0.0,
-    'month_sin': np.sin(2 * np.pi * future_dates.month / 12),
-})
-
-forecasts_with_cov = client.forecast(
-    df=df_with_cov,
-    X_df=future_df,         # Future covariates
-    h=12,
-    freq='ME',
-    level=[80, 95],
-)
-
-# ── Anomaly detection (built-in) ───────────────────────────────────────────────
-anomalies = client.detect_anomalies(
-    df=df,
-    freq='ME',
-    level=99,               # Flag as anomaly if outside 99% PI
-)
-print(anomalies[anomalies['anomaly'] == True])
-`}</PythonCode>
-
-      <h2 className="text-2xl font-bold text-gray-800 mt-8 mb-4">When TimeGPT Works Well</h2>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-4">
-        <div className="p-4 rounded-lg border-2 border-green-300 bg-green-50">
-          <h4 className="font-bold text-green-700 mb-2">Good Use Cases</h4>
-          <ul className="text-sm text-gray-700 space-y-1 list-disc pl-4">
-            <li>Cold-start: forecasting brand new series with no history</li>
-            <li>Rapid prototyping before investing in ML infrastructure</li>
-            <li>Short to medium series (&lt;500 observations)</li>
-            <li>Series with strong regular seasonality</li>
-            <li>Mixed-frequency portfolios (many series, different freqs)</li>
-            <li>When you don't have ML engineering resources</li>
-          </ul>
-        </div>
-        <div className="p-4 rounded-lg border-2 border-red-300 bg-red-50">
-          <h4 className="font-bold text-red-700 mb-2">Be Cautious When</h4>
-          <ul className="text-sm text-gray-700 space-y-1 list-disc pl-4">
-            <li>Highly domain-specific series (industrial sensors)</li>
-            <li>Very long series where classical methods fit well</li>
-            <li>Strict latency requirements (API adds network overhead)</li>
-            <li>Data privacy constraints (data sent to cloud)</li>
-            <li>Irregular time series or custom seasonalities</li>
-          </ul>
-        </div>
-      </div>
-
-      <h2 className="text-2xl font-bold text-gray-800 mt-8 mb-4">Zero-Shot Benchmark Performance</h2>
-      <p className="text-gray-700 leading-relaxed">
-        The TimeGPT paper reported competitive zero-shot results on multiple benchmarks. On
-        standard datasets, TimeGPT zero-shot often matches or slightly beats well-tuned
-        statistical baselines:
-      </p>
-
-      <ExampleBlock title="M4 Monthly Benchmark">
+      <TheoremBlock title="Prediction Intervals via Conformal Prediction">
         <p>
-          On M4 Monthly (48,000 series, H=18), TimeGPT zero-shot achieves sMAPE around 12-14%,
-          comparable to Naïve2 (16%) and AutoETS (12.4%), though below the ES-RNN winner (11.4%).
-          The key advantage: zero-shot TimeGPT requires no per-series model fitting, making it
-          useful when you receive hundreds of new series daily.
+          TimeGPT's prediction intervals use <strong>conformal prediction</strong>
+          rather than learned quantile outputs. Given a calibration set of
+          residuals, conformal prediction constructs intervals with a guaranteed
+          coverage of at least <InlineMath math="1 - \alpha" /> under
+          exchangeability:
+        </p>
+        <BlockMath math="P\!\bigl(y_{t+h} \in [\hat{y}_{t+h} - q_{1-\alpha},\; \hat{y}_{t+h} + q_{1-\alpha}]\bigr) \geq 1 - \alpha" />
+        <p className="text-sm mt-2">
+          where <InlineMath math="q_{1-\alpha}" /> is the{' '}
+          <InlineMath math="(1-\alpha)" />-quantile of calibration residuals.
+          This provides distribution-free coverage guarantees valid regardless
+          of the underlying data distribution.
+        </p>
+      </TheoremBlock>
+
+      <h2 className="text-xl font-semibold mt-8 mb-3 text-gray-800">
+        Exogenous Variables
+      </h2>
+      <p className="text-gray-700 leading-relaxed">
+        TimeGPT accepts future-known covariates via a separate{' '}
+        <code>X_df</code> argument. The model conditions on these covariates
+        during decoding, similarly to TFT's known-future covariate pathway.
+        Supported inputs:
+      </p>
+      <ul className="list-disc ml-6 mt-2 space-y-1 text-gray-700 text-sm">
+        <li><strong>Numeric future covariates:</strong> promotions, prices, event flags</li>
+        <li><strong>Calendar features:</strong> auto-generated from the frequency (day-of-week, etc.)</li>
+      </ul>
+      <p className="text-gray-700 leading-relaxed mt-3">
+        Static series-level attributes (e.g., category, region) are not yet
+        natively supported as inputs — use fine-tuning for strong domain-specific
+        adjustments.
+      </p>
+
+      <ExampleBlock title="When TimeGPT Is a Good First Choice">
+        <p className="text-sm text-gray-700">
+          TimeGPT excels at: quick prototyping without infrastructure setup,
+          cold-start series with no historical data, diverse portfolios with
+          varying frequencies, and scenarios where model training is impractical
+          (data privacy constraints, lack of ML engineering resources). It
+          consistently outperforms per-series ARIMA fitting while being faster
+          to deploy by orders of magnitude.
         </p>
       </ExampleBlock>
 
-      <WarningBlock title="API Costs and Rate Limits">
-        TimeGPT is a paid API service (free tier available). For production use with thousands
-        of series, estimate costs carefully: pricing is per input token (each data point counts
-        as a token). For large datasets, evaluate whether fine-tuning an open-source model
-        (Chronos, Lag-Llama) offers better cost-performance trade-offs.
+      <h2 className="text-xl font-semibold mt-8 mb-3 text-gray-800">
+        Full SDK Example
+      </h2>
+      <PythonCode code={timeGPTCode} />
+
+      <WarningBlock title="API Key and Token Consumption">
+        TimeGPT requires a Nixtla API key. Each request consumes tokens
+        proportional to the number of series, context length, and horizon.
+        To reduce cost: (1) batch all series in a single panel DataFrame
+        rather than per-series calls, (2) set{' '}
+        <code>add_history=False</code> to skip fitted-value computation, and
+        (3) reduce context length via the <code>input_size</code> parameter
+        if the series have short memory.
       </WarningBlock>
 
+      <NoteBlock title="TimeGPT vs. Open-Source Alternatives">
+        <ul className="list-disc ml-5 space-y-1 text-sm">
+          <li><strong>TimeGPT:</strong> easiest API, managed infra, anomaly detection, fine-tuning — but has API cost and data leaves your environment.</li>
+          <li><strong>Chronos (Amazon):</strong> open-source, runs locally, probabilistic, free — but slower on CPU and no covariate support.</li>
+          <li><strong>TimesFM (Google):</strong> open-source, point forecast only, very fast — but no intervals natively.</li>
+          <li>For data-sensitive applications (healthcare, finance), prefer local open-source models.</li>
+        </ul>
+      </NoteBlock>
+
       <ReferenceList references={[
-        { authors: 'Garza, A., Challu, C., Mergenthaler-Canseco, M.', year: 2023, title: 'TimeGPT-1', venue: 'arXiv', url: 'https://arxiv.org/abs/2310.03589' },
-        { authors: 'Makridakis, S. et al.', year: 2020, title: 'The M4 Competition: 100,000 time series and 61 forecasting methods', venue: 'International Journal of Forecasting', url: 'https://doi.org/10.1016/j.ijforecast.2019.04.014' },
-        { authors: 'Bommasani, R. et al.', year: 2021, title: 'On the Opportunities and Risks of Foundation Models', venue: 'arXiv', url: 'https://arxiv.org/abs/2108.07258' },
+        { author: 'Garza, A., & Mergenthaler-Canseco, M.', year: 2023, title: 'TimeGPT-1', venue: 'arXiv' },
+        { author: 'Angelopoulos, A. N., & Bates, S.', year: 2023, title: 'Conformal Risk Control', venue: 'ICLR' },
+        { author: 'Kim, T., et al.', year: 2022, title: 'Reversible Instance Normalization for Accurate Time-Series Forecasting against Distribution Shift', venue: 'ICLR' },
       ]} />
     </SectionLayout>
   );
