@@ -322,7 +322,7 @@ export default function MomentTimesFMSection() {
         ].map(({ q, a, color }) => (
           <div key={q} className="flex items-start gap-3 p-2 bg-gray-50 border border-gray-200 rounded">
             <span className="text-sm text-gray-600 flex-1">{q}</span>
-            <span className={`shrink-0 text-sm font-mono font-semibold text-${color}-700 bg-${color}-100 px-2 py-0.5 rounded`}>
+            <span className="shrink-0 text-sm font-mono font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
               {a}
             </span>
           </div>

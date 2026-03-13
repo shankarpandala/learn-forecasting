@@ -293,7 +293,7 @@ scenarios = {
 for name, inputs in scenarios.items():
     x_scenario = [1.0, inputs['gdp_lag1'], inputs['unemp_lag2']]
     pred = np.exp(result.predict(x_scenario)[0])
-    print(f"{name} scenario MRR: ${pred:,.0f}")`} />
+    print(f"{name} scenario MRR: \${pred:,.0f}")`} />
 
       <TheoremBlock title="Net Revenue Retention (NRR) as the Core Metric">
         For SaaS businesses, NRR is the single most important predictor of long-run revenue.

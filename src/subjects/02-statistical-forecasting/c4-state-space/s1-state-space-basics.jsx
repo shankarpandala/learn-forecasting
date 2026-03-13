@@ -365,12 +365,20 @@ export default function StateSpaceBasicsSection() {
                 label: 'Predicted', math: 'a_{t|t-1}', color: 'amber',
                 desc: 'Uses y_1,...,y_{t-1}. One-step-ahead forecast. Innovations v_t come from here.',
               },
-            ].map(({ label, math, color, desc }) => (
-              <div key={label} className={`rounded-lg border border-${color}-200 bg-${color}-50 p-4`}>
-                <h4 className={`font-semibold text-${color}-900 mb-1`}>{label}: <InlineMath math={math} /></h4>
-                <p className={`text-sm text-${color}-800`}>{desc}</p>
-              </div>
-            ))}
+            ].map(({ label, math, color, desc }) => {
+              const styles = {
+                sky: { box: 'rounded-lg border border-sky-200 bg-sky-50 p-4', h: 'font-semibold text-sky-900 mb-1', p: 'text-sm text-sky-800' },
+                violet: { box: 'rounded-lg border border-violet-200 bg-violet-50 p-4', h: 'font-semibold text-violet-900 mb-1', p: 'text-sm text-violet-800' },
+                amber: { box: 'rounded-lg border border-amber-200 bg-amber-50 p-4', h: 'font-semibold text-amber-900 mb-1', p: 'text-sm text-amber-800' },
+              };
+              const s = styles[color] || styles.sky;
+              return (
+                <div key={label} className={s.box}>
+                  <h4 className={s.h}>{label}: <InlineMath math={math} /></h4>
+                  <p className={s.p}>{desc}</p>
+                </div>
+              );
+            })}
           </div>
         </section>
 

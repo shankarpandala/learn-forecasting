@@ -79,7 +79,7 @@ export default function PymcForecasting() {
 
       <ExampleBlock title="Why Use pm.Data?">
         <code>pm.Data</code> creates a mutable container in the PyMC model graph. After sampling,
-        you can call <code>pm.set_data({'X': X_future})</code> to replace training covariates with
+        you can call <code>{"pm.set_data({'X': X_future})"}</code> to replace training covariates with
         future ones, then sample the posterior predictive without refitting the model. This is the
         standard pattern for out-of-sample prediction in PyMC.
       </ExampleBlock>

@@ -266,7 +266,7 @@ for sku in skus:
 df = pd.DataFrame(portfolio)
 print("\\n=== Portfolio Business Metrics ===")
 print(df[['SKU', 'fill_rate', 'annual_holding_cost', 'annual_lost_sales', 'total_annual_cost']].to_string(index=False))
-print(f"\\nTotal portfolio annual cost: ${df['total_annual_cost'].sum():,.0f}")
+print(f"\\nTotal portfolio annual cost: \${df['total_annual_cost'].sum():,.0f}")
 `}
       />
 

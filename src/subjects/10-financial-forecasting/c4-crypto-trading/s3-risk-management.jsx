@@ -149,7 +149,7 @@ portfolio_value = 100_000
 for name, shock in STRESS_SCENARIOS.items():
     if shock < 0:
         loss = portfolio_value * abs(shock)
-        print(f"{name}: portfolio loss = ${loss:,.0f} ({shock:.0%})")
+        print(f"{name}: portfolio loss = \${loss:,.0f} ({shock:.0%})")
 `;
 
 export default function RiskManagement() {
@@ -172,17 +172,21 @@ export default function RiskManagement() {
 
       <h2 className="text-2xl font-bold mt-8 mb-3">Three VaR Methods</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-        {[
-          { name: 'Parametric', desc: 'Assumes normal distribution. Fast but underestimates tail risk.', formula: '-\\mu - z_\\alpha \\sigma', color: 'blue' },
-          { name: 'Historical', desc: 'Uses empirical quantile of past returns. No distributional assumption, data-intensive.', formula: '-\\hat{F}^{-1}(\\alpha)', color: 'green' },
-          { name: 'Monte Carlo', desc: 'Simulates thousands of paths. Most flexible, handles complex instruments.', formula: '-\\text{quantile}(\\{L^{(s)}\\}, \\alpha)', color: 'purple' },
-        ].map(m => (
-          <div key={m.name} className={`p-3 bg-${m.color}-50 dark:bg-${m.color}-900/20 border border-${m.color}-200 dark:border-${m.color}-800 rounded-xl`}>
-            <div className={`font-semibold text-${m.color}-900 dark:text-${m.color}-300 mb-1`}>{m.name}</div>
-            <div className="mb-2"><InlineMath math={m.formula} /></div>
-            <div className="text-xs text-gray-600 dark:text-gray-400">{m.desc}</div>
-          </div>
-        ))}
+        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
+          <div className="font-semibold text-blue-900 dark:text-blue-300 mb-1">Parametric</div>
+          <div className="mb-2"><InlineMath math={'-\\mu - z_\\alpha \\sigma'} /></div>
+          <div className="text-xs text-gray-600 dark:text-gray-400">Assumes normal distribution. Fast but underestimates tail risk.</div>
+        </div>
+        <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl">
+          <div className="font-semibold text-green-900 dark:text-green-300 mb-1">Historical</div>
+          <div className="mb-2"><InlineMath math={'-\\hat{F}^{-1}(\\alpha)'} /></div>
+          <div className="text-xs text-gray-600 dark:text-gray-400">Uses empirical quantile of past returns. No distributional assumption, data-intensive.</div>
+        </div>
+        <div className="p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl">
+          <div className="font-semibold text-purple-900 dark:text-purple-300 mb-1">Monte Carlo</div>
+          <div className="mb-2"><InlineMath math={'-\\text{quantile}(\\{L^{(s)}\\}, \\alpha)'} /></div>
+          <div className="text-xs text-gray-600 dark:text-gray-400">Simulates thousands of paths. Most flexible, handles complex instruments.</div>
+        </div>
       </div>
 
       <h2 className="text-2xl font-bold mt-8 mb-3">CVaR: Expected Shortfall</h2>
