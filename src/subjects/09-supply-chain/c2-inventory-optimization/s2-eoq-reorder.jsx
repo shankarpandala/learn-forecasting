@@ -211,7 +211,7 @@ print(f"  Orders/year:       {D/Q_star:.1f}")
 print(f"  Cycle time:        {cycle_time:.0f} days")
 print(f"  Safety stock:      {ss:.0f} units")
 print(f"  Reorder point:     {rp:.0f} units")
-print(f"  Min total cost:    ${np.sqrt(2*D*S*H):.2f}/year")
+print(f"  Min total cost:    \${np.sqrt(2*D*S*H):.2f}/year")
 
 # ── Inventory simulation: (s, Q) policy ──────────────────────────────────────
 np.random.seed(42)

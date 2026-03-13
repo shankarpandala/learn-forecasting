@@ -262,7 +262,7 @@ print(summary)
 sku_data['days_of_cover'] = sku_data['safety_stock'] / sku_data['avg_daily_demand']
 overstocked = sku_data[sku_data['days_of_cover'] > 30].sort_values('ss_value', ascending=False)
 print(f"Potentially over-stocked SKUs: {len(overstocked)}")
-print(f"Excess SS value: ${overstocked['ss_value'].sum():,.0f}")`} />
+print(f"Excess SS value: \${overstocked['ss_value'].sum():,.0f}")`} />
 
       <TheoremBlock title="The Square Root Law for Safety Stock">
         When consolidating inventory across multiple locations (e.g., 4 warehouses into 1
