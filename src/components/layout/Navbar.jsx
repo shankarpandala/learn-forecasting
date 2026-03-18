@@ -84,7 +84,14 @@ export default function Navbar({ onToggleSidebar, sidebarOpen }) {
           <MenuIcon />
         </button>
 
-        {/* Logo */}
+        {/* Pandala.in + Logo */}
+        <a
+          href="https://www.pandala.in"
+          className="flex items-center font-mono text-sm text-gray-500 dark:text-gray-500 hover:opacity-80 transition-opacity select-none"
+        >
+          ~/<span className="text-[#5ce0d8]">pandala.in</span>
+        </a>
+        <span className="text-gray-300 dark:text-[#2d3a4d] select-none" aria-hidden="true">|</span>
         <Link
           to="/"
           className="flex items-center gap-2 font-bold text-lg shrink-0 mr-4 select-none"
